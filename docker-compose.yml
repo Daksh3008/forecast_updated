@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: forecast_postgres
+    environment:
+      POSTGRES_DB: markets
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: forecast_app
+    depends_on:
+      - postgres
+    environment:
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: markets
+      PG_USER: postgres
+      PG_PASSWORD: postgres
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+    stdin_open: true
+    tty: true
+
+volumes:
+  pgdata:

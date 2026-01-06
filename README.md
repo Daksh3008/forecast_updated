@@ -77,13 +77,20 @@ venv\scripts\activate
 pip install -r requirements.txt
 
 Config stored in `config/configs.py`
-1. download data
+1. download yfinance data
 python -m scripts.download_data
 output to data/
 
+if we want to use db as a datasource
+python -m db.init_db
+python -m db.write_daily_prices
+
 2. prepare features
-python -m data_pipeline.prepare_features
+python -m scripts.prepare_features
 output to data/feature_matrix.csv
+
+if datasource is db then feature matrix will be made using
+python -m data_pipeline.prepare_features
 
 3. training models individually (optional, models will be called internally)
 python -m scripts.train_lstm
@@ -106,7 +113,7 @@ outputs to analysis/shap_feature_ranking.csv
                         January 2026
                         after 10 days
 )
-python -m forecaster.predict
+python -m forecaster.run_forecast
 outputs to:
 outputs/forecasts/brent_YYYYMMDD.txt
 outputs/forecasts/brent_YYYYMMDD.json
@@ -117,3 +124,28 @@ python data_pipeline/prepare_features.py
 python one_shot_backtest.py
 python -m forecaster.run_forecast
 
+
+
+--------------------------------------------
+Docker process all steps to run
+
+docker compose up -d
+docker compose ps
+
+docker compose exec app bash
+
+db as a datasource:
+python -m db.init_db.py
+python -m db.write_daily_prices
+python -m data_pipeline/prepare_fearures
+
+yfinance as a datasource:
+python -m scripts.download_data
+python -m scripts.prepare_features
+
+python -m one_shot_backtest
+
+python -m forecaster.run_forecast
+
+once done running on docker
+docker compose down
