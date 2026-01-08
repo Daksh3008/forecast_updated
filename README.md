@@ -67,16 +67,7 @@ Planned addition:
 
 Models run on GPU (PyTorch Lightning)
 
-Create virtual environment
-python -m venv venv
-
-Activate virtual environment
-venv\scripts\activate
-
-0. install all libraries required to run
-pip install -r requirements.txt
-
-Config stored in `config/configs.py`
+COMMANDS AND OUTPUT LOCATION
 1. download yfinance data
 python -m scripts.download_data
 output to data/
@@ -118,34 +109,30 @@ outputs to:
 outputs/forecasts/brent_YYYYMMDD.txt
 outputs/forecasts/brent_YYYYMMDD.json
 
-Typical end-to-end workflow:
-python scripts/download_data.py
-python data_pipeline/prepare_features.py
-python one_shot_backtest.py
-python -m forecaster.run_forecast
 
+-------------------------------------------------------------------------
+Now run only script files
+1. database pipeline
+chmod +x run_db_pipeline.sh
+./run_db_pipeline.sh
 
+2. yfinance pipeline
+chmod +x run_yfinance_pipeline.sh
+./run_csv_pipeline.sh
+-------------------------------------------------------------------------
+Steps to follow:
 
---------------------------------------------
-Docker process all steps to run
-
+for db pipeline: 
 docker compose up -d
-docker compose ps
+docker compose ps 
+docker compose exec app bash 
+chmod +x run_db_pipeline.sh 
+./run_db_pipeline.sh 
+-----------------------------------------------------------
+for yfinance pipeline: 
+docker compose up -d 
+docker compose ps 
+docker compose exec app bash 
 
-docker compose exec app bash
-
-db as a datasource:
-python -m db.init_db.py
-python -m db.write_daily_prices
-python -m data_pipeline/prepare_fearures
-
-yfinance as a datasource:
-python -m scripts.download_data
-python -m scripts.prepare_features
-
-python -m one_shot_backtest
-
-python -m forecaster.run_forecast
-
-once done running on docker
-docker compose down
+chmod +x run_yfinance_pipeline.sh 
+./run_csv_pipeline.sh
