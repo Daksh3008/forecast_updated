@@ -15,7 +15,9 @@ data/tmp/
 *.pkl
 
 # large artifacts
-models/
+/models/
+!forecaster/models/
+!forecaster/models/**
 outputs/
 logs/
 

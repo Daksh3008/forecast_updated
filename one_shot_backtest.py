@@ -23,7 +23,7 @@ def run_one_shot_backtest():
     df = load_feature_matrix()
     results = []
 
-    anchors = df.loc["2023-12-31":"2025-10-31"].index
+    anchors = df.loc["2024-12-31":"2025-10-31"].index
     last_models = None
 
     for i, anchor in enumerate(anchors):

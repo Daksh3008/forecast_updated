@@ -135,4 +135,4 @@ docker compose ps
 docker compose exec app bash 
 
 chmod +x run_yfinance_pipeline.sh 
-./run_csv_pipeline.sh
+./run_yfinance_pipeline.sh
