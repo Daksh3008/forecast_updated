@@ -21,3 +21,4 @@ shap
 fastparquet
 psycopg2-binary
 feedparser
+fpdf2

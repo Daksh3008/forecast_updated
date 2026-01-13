@@ -19,11 +19,18 @@ services:
     depends_on:
       - postgres
     environment:
+      # Database
       PG_HOST: postgres
       PG_PORT: 5432
       PG_DB: markets
       PG_USER: postgres
       PG_PASSWORD: postgres
+      # Email 
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: forecastupdated.bot@gmail.com
+      SMTP_PASSWORD: meezqgesbvurmfec
+
     volumes:
       - .:/app
       - ./outputs:/app/outputs

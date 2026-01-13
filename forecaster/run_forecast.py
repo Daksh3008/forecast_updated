@@ -67,7 +67,7 @@ def main():
     print(f"\nSaved outputs to:")
     print(f" - {result['txt_path']}")
     print(f" - {result['json_path']}")
-
+    print(f" - {result['chart_path']}")
 
 if __name__ == "__main__":
     main()

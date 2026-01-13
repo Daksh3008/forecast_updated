@@ -28,6 +28,10 @@ from forecaster.confidence.confidence_bands import (
 )
 from forecaster.regime.regime_summary import market_regime
 
+# NEW UTILITIES
+from forecaster.utils.send_email import build_pdf_from_text, send_pdf_email
+from forecaster.utils.visualizations import plot_forecast_path
+
 
 CLOSE_COL = "brent_Close"
 OUTPUT_DIR = "outputs/forecasts"
@@ -38,12 +42,6 @@ OUTPUT_DIR = "outputs/forecasts"
 # ---------------------------------------------------------
 
 def generate_future_trading_days(anchor_ts: pd.Timestamp, target_ts: pd.Timestamp):
-    """
-    Generate business days strictly AFTER anchor_ts.
-    - target_ts < anchor_ts  -> error
-    - target_ts == anchor_ts -> zero-step forecast
-    - target_ts > anchor_ts  -> normal recursion
-    """
     if target_ts < anchor_ts:
         raise ValueError(
             f"Target date {target_ts.date()} is before last available data date {anchor_ts.date()}"
@@ -65,7 +63,8 @@ def generate_future_trading_days(anchor_ts: pd.Timestamp, target_ts: pd.Timestam
 
 def run_forecast(asset: str, target_date: date) -> dict:
     """
-    Fully causal forecast to an externally resolved target date.
+    Fully causal forecast with optional PDF + email delivery
+    and forecast path visualization.
     """
 
     # -----------------------------------------------------
@@ -82,14 +81,14 @@ def run_forecast(asset: str, target_date: date) -> dict:
     anchor_date = anchor_ts.date()
 
     # -----------------------------------------------------
-    # 2. Determine trading days to predict
+    # 2. Determine trading days
     # -----------------------------------------------------
 
     future_dates = generate_future_trading_days(anchor_ts, target_ts)
     start_price = float(df[CLOSE_COL].iloc[-1])
 
     # -----------------------------------------------------
-    # 3. Train models (UNCHANGED)
+    # 3. Train models
     # -----------------------------------------------------
 
     lstm = train_lstm(df, {
@@ -116,14 +115,11 @@ def run_forecast(asset: str, target_date: date) -> dict:
     ridge = train_ridge(df, {"alpha": 4.0})
 
     # -----------------------------------------------------
-    # 4. Forecast (ZERO or MULTI step)
+    # 4. Forecast
     # -----------------------------------------------------
 
     if len(future_dates) == 0:
-        # Same-day forecast (nowcast)
-        p_lstm = p_tcn = p_ridge = pd.Series(
-            [start_price], index=[anchor_ts]
-        )
+        p_lstm = p_tcn = p_ridge = pd.Series([start_price], index=[anchor_ts])
     else:
         p_lstm = lstm_predict(lstm, df, start_price, future_dates)
 
@@ -140,12 +136,10 @@ def run_forecast(asset: str, target_date: date) -> dict:
     }
 
     # -----------------------------------------------------
-    # 5. Forecast-safe ensemble (UNCHANGED)
+    # 5. Ensemble (forecast-safe)
     # -----------------------------------------------------
 
-    hist_end = anchor_ts
-    hist_start = df.index[-252] if len(df) > 252 else df.index[0]
-    hist_df = df.loc[hist_start:hist_end]
+    hist_df = df.iloc[-252:] if len(df) > 252 else df
 
     p_lstm_h = lstm_predict(
         lstm, hist_df, hist_df[CLOSE_COL].iloc[0], hist_df.index[1:]
@@ -162,22 +156,16 @@ def run_forecast(asset: str, target_date: date) -> dict:
         ridge, hist_df, hist_df[CLOSE_COL].iloc[0], hist_df.index[1:]
     )
 
-    preds_hist = {
-        "lstm": p_lstm_h,
-        "tcn": p_tcn_h,
-        "ridge": p_ridge_h,
-    }
-
     weights = fit_ridge_weights(
-        preds_hist,
+        {"lstm": p_lstm_h, "tcn": p_tcn_h, "ridge": p_ridge_h},
         hist_df.loc[p_lstm_h.index, CLOSE_COL],
     )
 
-    ensemble = predict_with_weights(preds, weights)
-    final_price = float(ensemble.iloc[-1])
+    ensemble_path = predict_with_weights(preds, weights)
+    final_price = float(ensemble_path.iloc[-1])
 
     # -----------------------------------------------------
-    # 6. Context (OUTPUT ONLY)
+    # 6. Context
     # -----------------------------------------------------
 
     macro = fetch_macro_snapshot()
@@ -188,26 +176,21 @@ def run_forecast(asset: str, target_date: date) -> dict:
     sentiment = sentiment_summary(news)
     top_news = top_headlines(news, scores, top_k=10)
 
+    sigma = estimate_residual_sigma("outputs/one_shot_backtest.csv")
+    bands = confidence_bands(final_price, sigma, len(future_dates))
+
+    _, regime_text = market_regime(macro, df[CLOSE_COL])
+
+    # -----------------------------------------------------
+    # 7. Report
+    # -----------------------------------------------------
+
     model_prices = {
         "lstm": float(p_lstm.iloc[-1]),
         "tcn": float(p_tcn.iloc[-1]),
         "ridge": float(p_ridge.iloc[-1]),
         "ensemble": final_price,
     }
-
-    sigma = estimate_residual_sigma("outputs/one_shot_backtest.csv")
-
-    bands = confidence_bands(
-        forecast_price=model_prices["ensemble"],
-        sigma=sigma,
-        horizon_days=len(future_dates),
-    )
-
-    _, regime_text = market_regime(macro, df[CLOSE_COL])
-
-    # -----------------------------------------------------
-    # 7. Report + persistence
-    # -----------------------------------------------------
 
     text_report = build_report(
         model_prices=model_prices,
@@ -226,6 +209,7 @@ def run_forecast(asset: str, target_date: date) -> dict:
 
     txt_path = f"{OUTPUT_DIR}/brent_{tag}.txt"
     json_path = f"{OUTPUT_DIR}/brent_{tag}.json"
+    chart_path = f"{OUTPUT_DIR}/brent_{tag}_forecast.png"
 
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write(text_report)
@@ -243,10 +227,42 @@ def run_forecast(asset: str, target_date: date) -> dict:
             indent=2,
         )
 
+    # -----------------------------------------------------
+    # 8. Visualization
+    # -----------------------------------------------------
+
+    plot_forecast_path(
+        ensemble_series=ensemble_path,
+        anchor_price=start_price,
+        out_path=chart_path,
+    )
+
+    # -----------------------------------------------------
+    # 9. Optional PDF + Email
+    # -----------------------------------------------------
+
+    choice = input("\n📄 Email PDF report? (yes/no): ").strip().lower()
+
+    if choice in {"yes", "y"}:
+        email = input("📧 Enter email address: ").strip()
+        pdf_path = f"{OUTPUT_DIR}/brent_{tag}.pdf"
+
+        build_pdf_from_text(text_report, pdf_path)
+
+        send_pdf_email(
+            to_email=email,
+            subject="Brent Crude Forecast Report",
+            body="Attached is your requested Brent crude forecast report.",
+            pdf_path=pdf_path,
+        )
+
+        print(f"✅ PDF sent to {email}")
+
     return {
         "forecast_price": final_price,
         "weights": weights,
         "text_report": text_report,
         "txt_path": txt_path,
         "json_path": json_path,
+        "chart_path": chart_path,
     }
